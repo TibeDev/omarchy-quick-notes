@@ -3,6 +3,8 @@
 Quick notes for the Omarchy bar. A sticky-note icon lives in your bar; click
 it to open a popup where you can create, edit, and delete short notes.
 
+![Quick Notes preview](Preview.png)
+
 ## Install
 
 ```sh
