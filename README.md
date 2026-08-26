@@ -9,13 +9,6 @@ it to open a popup where you can create, edit, and delete short notes.
 omarchy plugin add https://github.com/tibevdb/quick-notes.git --enable
 ```
 
-Or, for local development, symlink this folder into your plugins directory:
-
-```sh
-ln -s /path/to/VDB-Notes ~/.config/omarchy/plugins/quick-notes
-omarchy-shell shell rescanPlugins
-```
-
 ## Usage
 
 - Click the  icon in the bar to open the notes panel.
@@ -38,9 +31,9 @@ The whole panel is navigable with arrows - no mouse required:
 - **Escape**: while typing in a field, the first press leaves typing mode
   and returns to browsing the editor's controls; press it again to go back
   to the list; once more to close the panel.
-- **Ctrl+S** saves immediately, **Ctrl+N** starts a new note, and
-  **Ctrl+Backspace** deletes the note being edited - all three work no
-  matter where the focus is while a note is open.
+- **Ctrl+N** starts a new note from anywhere in the panel. While a note is
+  open for editing, **Ctrl+S** saves immediately and **Ctrl+Backspace**
+  deletes the note - both work no matter where the focus is.
 
 ### Storage
 
@@ -57,3 +50,7 @@ loaded; an oversized file is rejected rather than read into memory.
 ```sh
 omarchy plugin remove quick-notes
 ```
+
+## Disclaimer
+
+This plugin was vibe coded with [Claude Code](https://claude.com/claude-code).
