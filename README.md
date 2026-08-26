@@ -8,7 +8,7 @@ it to open a popup where you can create, edit, and delete short notes.
 ## Install
 
 ```sh
-omarchy plugin add https://github.com/tibevdb/quick-notes.git --enable
+omarchy plugin add https://github.com/tibevdb/omarchy-quick-notes.git --enable
 ```
 
 ## Usage
