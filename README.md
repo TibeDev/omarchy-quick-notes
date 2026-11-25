@@ -47,6 +47,15 @@ characters per body, and a 12 MiB total file size. The file's size is
 checked on disk (via `stat`, without reading its content) before it is ever
 loaded; an oversized file is rejected rather than read into memory.
 
+Loading is defensive so that a bad read can never destroy notes: the file is
+read with `cat` (not `FileView.reload()`, whose `loaded` signal is not
+delivered reliably on every Quickshell build), a failed or garbled read keeps
+the notes already held in memory, and an empty list is never written over a
+file that was not successfully read unless a note was explicitly deleted in
+the same session. When the widget starts and finds notes on disk, it also
+snapshots them to `notes.json.bak` in the same directory, so the previous
+contents can be recovered if anything ever goes wrong.
+
 ## Remove
 
 ```sh

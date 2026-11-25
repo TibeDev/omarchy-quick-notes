@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "quick-notes",
   "name": "Quick Notes",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "tibevdb",
   "license": "MIT",
   "description": "Quick notes in the bar - create, edit, and delete notes from a popup panel.",
