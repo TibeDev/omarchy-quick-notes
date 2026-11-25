@@ -22,6 +22,12 @@ Panel {
   property bool editFieldActive: false
 
   property bool suppressSave: false
+  // True once the in-memory list is known to match notes.json on disk. While false,
+  // an empty list is never written over the file (it may contain notes we failed to read).
+  property bool diskSynced: false
+  // Set when the user explicitly deletes a note this session, which legitimates writing [].
+  property bool deletedThisSession: false
+  property bool backupDone: false
 
   readonly property int maxNotes: 500
   readonly property int maxTitleLength: 200
@@ -74,19 +80,26 @@ Panel {
   }
 
   function loadNotesText(text) {
-    if (typeof text !== "string" || text.length > root.maxFileBytes) {
-      console.warn("Quick Notes: refusing to load notes.json - " + (text ? text.length : 0) + " bytes exceeds the " + root.maxFileBytes + " byte limit")
+    var parsed = null
+    if (typeof text === "string" && text.length <= root.maxFileBytes) {
+      try {
+        parsed = JSON.parse(text)
+      } catch (e) {
+        parsed = null
+      }
+    } else if (typeof text === "string") {
+      console.warn("Quick Notes: refusing to load notes.json - " + text.length + " bytes exceeds the " + root.maxFileBytes + " byte limit")
+    }
+    if (!Array.isArray(parsed)) {
+      // A failed or garbled read must never discard notes we already hold in memory:
+      // the next save would then write [] over the real file.
+      if (root.notes.length > 0) {
+        console.warn("Quick Notes: notes.json unreadable; keeping " + root.notes.length + " in-memory notes")
+        return
+      }
       root.notes = []
       return
     }
-    var parsed
-    try {
-      parsed = JSON.parse(text)
-    } catch (e) {
-      root.notes = []
-      return
-    }
-    if (!Array.isArray(parsed)) { root.notes = []; return }
 
     var seenIds = ({})
     var cleaned = []
@@ -100,6 +113,7 @@ Panel {
     cleaned.sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0) })
     if (cleaned.length > root.maxNotes) cleaned = cleaned.slice(0, root.maxNotes)
     root.notes = cleaned
+    root.diskSynced = true
   }
 
   function checkAndLoad(reason) {
@@ -112,7 +126,8 @@ Panel {
   function handleStatResult(output, reason) {
     var size = parseInt(String(output).trim(), 10)
     if (!isFinite(size)) {
-      if (reason === "initial") root.notes = []
+      // No file at all: disk is empty, which matches our empty in-memory list.
+      if (reason === "initial") { root.notes = []; root.diskSynced = true }
       return
     }
     if (size > root.maxFileBytes) {
@@ -120,7 +135,19 @@ Panel {
       if (reason === "initial") root.notes = []
       return
     }
-    notesFile.reload()
+    // Snapshot the on-disk notes once per instance, before anything can overwrite them.
+    // This is keyed off the file's existence (not a successful parse), so it still
+    // protects the file when the load itself fails. Anything larger than "[]" counts.
+    if (reason === "initial" && size > 2 && !root.backupDone) {
+      root.backupDone = true
+      Quickshell.execDetached(["cp", "--", root.notesPath, root.notesPath + ".bak"])
+    }
+    // Read the file with cat rather than FileView.reload(): in this Quickshell build the
+    // FileView `loaded` signal is not delivered reliably (it was observed never firing for
+    // some instances), which left every session starting with an empty list and then
+    // overwriting the saved notes on the first save.
+    readProc.command = ["cat", "--", root.notesPath]
+    readProc.running = true
   }
 
   function persist() {
@@ -129,8 +156,16 @@ Panel {
       console.warn("Quick Notes: refusing to write notes.json - serialized size exceeds the " + root.maxFileBytes + " byte limit")
       return
     }
-    Quickshell.execDetached(["mkdir", "-p", root.stateDir])
+    // Never let an empty list clobber a file we never managed to read: if notes.json
+    // holds notes but this instance's load failed, [] in memory is ignorance, not intent.
+    if (root.notes.length === 0 && !root.diskSynced && !root.deletedThisSession) {
+      console.warn("Quick Notes: skipping write of an empty list over notes.json - disk state unknown and nothing was deleted this session")
+      return
+    }
+    // The state directory is created once at startup (see Component.onCompleted);
+    // spawning mkdir here raced the write and could silently drop the first save.
     notesFile.setText(payload)
+    root.diskSynced = true
   }
 
   function removeNoteInternal(id) {
@@ -215,6 +250,7 @@ Panel {
     var id = root.confirmDeleteId
     if (id === "") return
     root.confirmDeleteId = ""
+    root.deletedThisSession = true
     root.removeNoteInternal(id)
     root.persist()
     if (root.editingId === id) {
@@ -289,7 +325,10 @@ Panel {
     root.opened ? root.close() : root.open()
   }
 
-  Component.onCompleted: root.checkAndLoad("initial")
+  Component.onCompleted: {
+    Quickshell.execDetached(["mkdir", "-p", root.stateDir])
+    root.checkAndLoad("initial")
+  }
 
   onOpenedChanged: {
     if (root.opened) {
@@ -322,6 +361,14 @@ Panel {
     }
   }
 
+  Process {
+    id: readProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.loadNotesText(text)
+    }
+  }
+
   FileView {
     id: notesFile
     path: root.notesPath
@@ -329,8 +376,7 @@ Panel {
     watchChanges: true
     atomicWrites: true
     printErrors: false
-    onLoaded: root.loadNotesText(text())
-    onLoadFailed: root.loadNotesText("[]")
+    // Writes only. Loading goes through stat -> cat -> loadNotesText (see handleStatResult).
     onFileChanged: root.checkAndLoad("changed")
   }
 
